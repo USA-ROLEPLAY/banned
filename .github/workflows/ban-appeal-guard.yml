@@ -1,0 +1,149 @@
+name: Ban Appeal Guard
+
+on:
+  issues:
+    types: [opened, reopened]
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: ban-appeal-state
+  cancel-in-progress: false
+
+jobs:
+  guard-and-register:
+    if: contains(github.event.issue.labels.*.name, 'ban-appeal')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Guard & register 14-day cooldown
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const issue = context.payload.issue;
+            const author = issue.user.login;
+            const now = new Date();
+
+            // --- Config ---
+            const DAYS_14 = 14;
+            const MONTHS_6 = 6;
+            const STATE_PATH = '.github/appeal_state.json';
+            const BLOCKLIST_PATH = '.github/appeal_blocklist.txt';
+            const LABEL_APPEAL   = 'ban-appeal';
+            const LABEL_DENIED   = 'appeal-denied';
+            const LABEL_APPROVED = 'appeal-approved';
+            const LABEL_BLOCKED  = 'appeal-blocked';
+
+            const msPerDay = 24*60*60*1000;
+            const toISO = d => new Date(d).toISOString();
+
+            async function getFile(path) {
+              try {
+                const res = await github.rest.repos.getContent({ owner, repo, path });
+                const sha = res.data.sha;
+                const content = Buffer.from(res.data.content, 'base64').toString('utf8');
+                return { content, sha };
+              } catch (e) {
+                if (e.status === 404) return { content: null, sha: null };
+                throw e;
+              }
+            }
+            async function putFile(path, content, sha, message) {
+              await github.rest.repos.createOrUpdateFileContents({
+                owner, repo, path, message,
+                content: Buffer.from(content, 'utf8').toString('base64'),
+                sha: sha || undefined
+              });
+            }
+
+            // Optional: check blocklist (by login or id present in body)
+            async function isBlocklisted() {
+              const b = await getFile(BLOCKLIST_PATH);
+              if (!b.content) return false;
+              const lines = b.content.split(/\r?\n/).map(s => s.trim()).filter(Boolean).filter(l => !l.startsWith('#'));
+              const body = issue.body || '';
+              const found = lines.some(id =>
+                id.toLowerCase() === author.toLowerCase() ||
+                new RegExp(id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(body)
+              );
+              return found;
+            }
+
+            // Load state
+            const stateFile = await getFile(STATE_PATH);
+            let state = { entries: [] };
+            if (stateFile.content) {
+              try { state = JSON.parse(stateFile.content); }
+              catch { state = { entries: [] }; }
+            }
+
+            // Helper: find an active entry for this author
+            const nowMs = now.getTime();
+            function activeFor(login) {
+              return state.entries.find(e =>
+                e.login.toLowerCase() === login.toLowerCase() &&
+                new Date(e.expires_at).getTime() > nowMs
+              );
+            }
+
+            // Blocklist first
+            if (await isBlocklisted()) {
+              try { await github.rest.issues.addLabels({ owner, repo, issue_number: issue.number, labels: [LABEL_BLOCKED] }); } catch {}
+              await github.rest.issues.createComment({ owner, repo, issue_number: issue.number,
+                body: `This account/ID is **blocked from appeals**.`
+              });
+              await github.rest.issues.lock({ owner, repo, issue_number: issue.number, lock_reason: 'spam' }).catch(()=>{});
+              await github.rest.issues.update({ owner, repo, issue_number: issue.number, state: 'closed' });
+              return;
+            }
+
+            // Enforce: one open appeal
+            const openByAuthor = await github.paginate(github.rest.issues.listForRepo, {
+              owner, repo, state: 'open', creator: author, per_page: 100
+            });
+            const othersOpen = openByAuthor.filter(i => i.number !== issue.number && i.labels?.some(l => l.name === LABEL_APPEAL));
+            if (othersOpen.length > 0) {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: issue.number,
+                body: `You already have an **open appeal** (#${othersOpen[0].number}). Please keep discussion there.`
+              });
+              await github.rest.issues.update({ owner, repo, issue_number: issue.number, state: 'closed' });
+              return;
+            }
+
+            // Enforce: cooldown via state file (14 days since last submission)
+            const active = activeFor(author);
+            if (active) {
+              const remaining = Math.ceil((new Date(active.expires_at).getTime() - nowMs)/msPerDay);
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: issue.number,
+                body: `You must wait **${remaining} day(s)** before opening another appeal.`
+              });
+              await github.rest.issues.update({ owner, repo, issue_number: issue.number, state: 'closed' });
+              return;
+            }
+
+            // Passed checks → register a fresh 14-day cooldown
+            const expires = new Date(nowMs + DAYS_14*msPerDay);
+            state.entries = state.entries
+              // prune expired
+              .filter(e => new Date(e.expires_at).getTime() > nowMs)
+              // drop any stale records for this login
+              .filter(e => e.login.toLowerCase() !== author.toLowerCase());
+            state.entries.push({
+              login: author,
+              reason: 'cooldown-14d',
+              issue: issue.number,
+              created_at: toISO(now),
+              expires_at: toISO(expires)
+            });
+
+            await putFile(STATE_PATH, JSON.stringify(state, null, 2), stateFile.sha,
+              `ban-appeal: register 14d cooldown for @${author} (issue #${issue.number})`);
+
+            await github.rest.issues.createComment({
+              owner, repo, issue_number: issue.number,
+              body: `Thanks for your appeal. A **14-day** cooldown is now active to prevent duplicates. Staff will review.`
+            });
