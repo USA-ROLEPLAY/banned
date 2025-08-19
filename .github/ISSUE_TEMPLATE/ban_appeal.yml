@@ -1,0 +1,143 @@
+name: "🚫 Ban Appeal"
+description: Request a review of a ban applied on one of our games/servers. One open appeal per person.
+labels: ["ban-appeal"]
+title: "Ban Appeal: <Your in-game name> — <Game/Server>"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## ⚠️ Read before submitting
+        - You may have **one (1) open appeal at a time**.
+        - If you recently submitted an appeal, you must wait **14 days** before submitting another.
+        - If an appeal was **denied**, you must wait **6 months** before appealing again.
+        - Submitting false info or spam can result in being **blocked from future appeals**.
+        - Attach **evidence** (screenshots/video/logs) if you claim your ban was in error.
+
+        _We reply when we can. Creating duplicates will be auto-closed._
+
+  - type: dropdown
+    id: game_active
+    attributes:
+      label: 🎮 Game / Platform of the current ban
+      options:
+        - ARK: Survival Ascended
+        - ARK: Survival Evolved
+        - Discord
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: map
+    attributes:
+      label: 🗺️ Map / Server (if ARK)
+      options:
+        - The Island - PVP
+        - Scorched Earth - PVE
+        - Extinction - PVE
+        - Astraeos - PVE
+        - Ragnarok - PVE
+        - The Center - PVE
+        - Aberration - PVE
+        - Necrotic Dominion - PVE
+        - Svartalfheim - PVE
+        - Eden - PVE
+        - Nyrandil - PVE
+        - N/A (not ARK)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: game_initial
+    attributes:
+      label: 🧭 Original game/platform the ban was first issued on
+      options:
+        - ARK: Survival Ascended
+        - ARK: Survival Evolved
+        - Discord
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: ign
+    attributes:
+      label: 👤 In-game name (IGN) / Discord tag
+      placeholder: "YourName#1234 or IGN"
+    validations:
+      required: true
+
+  - type: input
+    id: account_id
+    attributes:
+      label: 🆔 Account ID
+      description: "Steam64 / Epic / EOS / Discord ID (whichever applies)."
+      placeholder: "e.g., Steam64: 7656119..., EOS: 0002a408..."
+    validations:
+      required: true
+
+  - type: input
+    id: ban_date
+    attributes:
+      label: 📅 Approximate date/time of ban
+      placeholder: "YYYY-MM-DD, HH:MM (with timezone)"
+    validations:
+      required: true
+
+  - type: input
+    id: moderator
+    attributes:
+      label: 🛡️ Staff/mod who issued the ban (if known)
+      placeholder: "Unknown / Not sure is OK"
+    validations:
+      required: false
+
+  - type: textarea
+    id: rule_reason
+    attributes:
+      label: 📖 Why were you banned? (your understanding & rule(s) involved)
+      placeholder: "Describe the situation and which rule(s) you believe were cited."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: admission
+    attributes:
+      label: ✅ Do you acknowledge breaking the rules?
+      options:
+        - Yes
+        - No
+        - Partially / Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: mitigation
+    attributes:
+      label: 🪙 Context, mitigating factors, and why the ban should be reconsidered
+      placeholder: "Explain what happened, what you've learned, and how you'll avoid issues in future."
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 🧾 Evidence / Proof
+      description: "Links to videos/screenshots/logs. Drag & drop files to attach."
+      placeholder: "URLs, images, or logs supporting your claim."
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: acks
+    attributes:
+      label: 📜 Acknowledgements
+      options:
+        - label: "I understand only one open appeal is allowed."
+          required: true
+        - label: "I understand submitting another appeal within 14 days will be auto-closed."
+          required: true
+        - label: "I understand a denied appeal means I must wait 6 months before trying again."
+          required: true
+        - label: "I confirm the information provided is accurate and truthful."
+          required: true
