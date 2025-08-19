@@ -1,20 +1,19 @@
-# Each entry represents a ban. Identifiers let us fan out to games that need them.
-# Use as many identifiers as you can verify; leave unknown fields out.
-- id: ban-2025-0001
-  scope: global            # global | game
-  games: []                # if scope: game -> ["ark", "future_game"]
-  reason: cheating         # short category (cheating, exploiting, harassment, hate_speech, doxxing, etc.)
-  notes: "Aimbot evidence on 2025-08-01. See case note cs-0001."
-  evidence:
-    urls:
-      - "https://example.com/video/…"   # links to redacted proof
-  created_at: "2025-08-01T12:34:00Z"
-  expires_at: null          # or ISO timestamp for temporary bans
+# registry/bans.yml
+# Global ban registry (edit this file; exports are generated automatically)
+# Minimal fields: id + at least one identifier
+
+- id: ban-0001
+  reason: "Aimbotting in PvP"
+  issued_at: "2025-08-18T12:34:56Z"
+  issued_by: "moderator-foo"
+  duration: "permanent"          # or ISO-8601 like "P30D"
+  scope: "global"                 # "global" or list per-game (e.g., ["ark"])
   identifiers:
-    steam_id: "7656119xxxxxxxxxx"       # SteamID64
-    epic_id: null
-    xbox_gamertag: null
-    psn_id: null
-    discord_id: "123456789012345678"    # if relevant
-  created_by: jlengelbrecht
-  updated_by: jlengelbrecht
+    steam: "76561198000000000"   # SteamID64 if known
+    epic: ""                     # Epic Online Services ID if known
+    xbox: ""                     # Xbox Live XUID if known
+    psn: ""                      # PSN Online ID if known
+    discord: ""                  # Discord snowflake if you track it
+  notes: "Video evidence at https://…"
+
+# Add more entries below…
