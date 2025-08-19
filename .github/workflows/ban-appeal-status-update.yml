@@ -1,0 +1,96 @@
+name: Ban Appeal Status Update
+
+on:
+  issues:
+    types: [labeled, closed]
+
+permissions:
+  contents: write
+  issues: read
+
+concurrency:
+  group: ban-appeal-state
+  cancel-in-progress: false
+
+jobs:
+  update-state:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync state for approved/denied
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const issue = context.payload.issue;
+            const isAppeal = issue.labels?.some(l => l.name === 'ban-appeal');
+            if (!isAppeal) return;
+
+            const STATE_PATH = '.github/appeal_state.json';
+            const LABEL_DENIED   = 'appeal-denied';
+            const LABEL_APPROVED = 'appeal-approved';
+
+            const event = context.payload.action; // 'labeled' | 'closed'
+            const labelJustAdded = event === 'labeled' ? context.payload.label?.name : null;
+
+            async function getFile(path) {
+              try {
+                const res = await github.rest.repos.getContent({ owner, repo, path });
+                return { sha: res.data.sha, content: Buffer.from(res.data.content, 'base64').toString('utf8') };
+              } catch (e) {
+                if (e.status === 404) return { sha: null, content: JSON.stringify({entries:[]}) };
+                throw e;
+              }
+            }
+            async function putFile(path, content, sha, message) {
+              await github.rest.repos.createOrUpdateFileContents({
+                owner, repo, path, message,
+                content: Buffer.from(content, 'utf8').toString('base64'),
+                sha: sha || undefined
+              });
+            }
+
+            const stateFile = await getFile(STATE_PATH);
+            let state = JSON.parse(stateFile.content);
+            const login = issue.user.login;
+            const now = new Date();
+
+            function setSixMonths() {
+              const closedAt = issue.closed_at ? new Date(issue.closed_at) : now;
+              const expires = new Date(closedAt);
+              expires.setMonth(expires.getMonth() + 6);
+              // prune expired & remove any existing for login
+              state.entries = state.entries
+                .filter(e => new Date(e.expires_at) > new Date())
+                .filter(e => e.login.toLowerCase() !== login.toLowerCase());
+              state.entries.push({
+                login, reason: 'denied-6m', issue: issue.number,
+                created_at: closedAt.toISOString(), expires_at: expires.toISOString()
+              });
+            }
+            function removeLogin() {
+              state.entries = state.entries.filter(e => e.login.toLowerCase() !== login.toLowerCase());
+            }
+
+            if (event === 'labeled') {
+              if (labelJustAdded === LABEL_DENIED) {
+                setSixMonths();
+              } else if (labelJustAdded === LABEL_APPROVED) {
+                removeLogin();
+              } else {
+                return;
+              }
+            } else if (event === 'closed') {
+              // If closed AND already has 'appeal-denied', ensure 6m lock
+              if (issue.labels?.some(l => l.name === LABEL_DENIED)) {
+                setSixMonths();
+              }
+              // If closed AND has 'appeal-approved', remove
+              if (issue.labels?.some(l => l.name === LABEL_APPROVED)) {
+                removeLogin();
+              }
+            } else {
+              return;
+            }
+
+            await putFile(STATE_PATH, JSON.stringify(state, null, 2), stateFile.sha,
+              `ban-appeal: state sync for @${login} (issue #${issue.number})`);
